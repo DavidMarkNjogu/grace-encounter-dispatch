@@ -1,0 +1,23 @@
+PROMPT 1: SYSTEM CONCEPTUALIZATION & CORE REQS
+"SO DO YOU SEE HOW SUPABASE HAS MODULARIZED TABLE VIEWS OR HOW POSTHOG HAS IT LIKE IT IS MORE LIKE FLOATING CANVAS WITH TABLES . LEMME PASTE AN IMAGE . SO I AM TRYING TO IMPLEMENT THIS KIND OF SYSTEM IN MY PROJECT WHICH NEEDES TO BE ONLINE LIKE YESTERDAY . HERE IS A SNIPPET OF THAT THOUGH IT IS ROUGH . Current state of affairs at the moment is that they have now gotten to van leaders. Each van has a capacity of 14 people. another thing is that i would like to have thses groups in a sort of collective interface like supabase has with its tables whereby you can drag and drop as well as edit like in a collective spsace. so approximately we are gonna have sth between 37 to 40 matatus. so we also need to verify those list that no one appears more than twice. we should also make it smart enough to know that if it meets 2 people with the same number it should immediately move to their number before ruling them out as duplicates. There are also some peopele who are in the group but not in the list so maybe the core initial feature may come back . another thing is since we are confirming who is attending and who is not, we can have like a list of reserves wehereby we can swap out people and then add the one on the reserves and then the replaced one will be given their own category but they should not mix coz maybe they may come along and mybe pick up their phones or sth . also i was thinking to help the matatu mangaers manage their lists we can just have a modal for them and their list and it should be downloadable offline so that they can just have it on the go. it should havethe names and the phone numbers and these phone numbers should be like clickable linjks . so basically clicking one should gimme options of texting via Whatsapp or aclling them via the phone's caller app . SO I NEED TO HAVE A DESCRIPTION TO KIND OF EXPLAIN TO MY AGENT"
+
+PROMPT 2: SINGLE PAGE TEXT REPLACEMENT & RAW DATA INGESTION
+"can we just build this as a single html page without much stuff to do with the db coz we already have the values and lists with van leaders. so only thing you should gimme is a way to paste all this once . sth like Plaintext
+==================================================
+LEADER: JOSHUA FRANCIS (14)
+==================================================
+1. Faith - 0117415933
+... [Followed by 13 groups of raw leader manifests]"
+
+PROMPT 3: INLINE EDITING, HEADCOUNTS & STATUS DROPDOWNS
+"will there be a way fo me to replace the data and let several people see it and also for the van managers . like allowing them to click and call plus text the numbers in their repsective fields as well as edit them where the names might be worng and also to maybe have a small dorp down like maybe not picking up, confirmed, decliner or sth . and also a checkbox to tick people off when taking a head count for presence"
+
+PROMPT 4: HANDLING SPELLING & TYPO CORRECTIONS ON DATA RELOAD
+"what if i update the system and they had made editorial changes for instance chnaging misspleed names. can that be fixed"
+
+PROMPT 5: CODESPACING, COOKIES, AND CELLULAR LINK MESSAGING TEMPLATES
+"i do not mean changes to number. i mean like design changes that are gonna reflect on more than 40 peoples devices or adding a new table which will require rewriting and replacing the whole html. wont this overwrite local dtaa maybe when they refresh but it wont coz it will attach the cookies or persistent data. also i hope on mobile it will still look good for hem honestly. also the numbers should still be clickable and give options to redirect to call or whatsapp or even text message and hopefully it may come with a pre configured text like hey im reaching out regarding your seat or sth bla bla grace encounter and the sort. an then maybe the manager may change the nmaes nd/or numbers that may have issues maybe . so when i push a change they should not be affected at all"
+
+PROMPT 6: MODULARIZATION FILE BOUNDS & DESIGN SYSTEM COMPONENT NAME
+"the code got out of hand and out of bounds so give it in that copyable modularized compont. btw what is the actual name?
+like i meant what is the name for tis block or like div or sth . like official name"

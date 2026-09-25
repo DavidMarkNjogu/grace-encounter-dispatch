@@ -1,0 +1,1289 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Grace Encounter - Dispatch Hub</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <style>
+        .canvas-bg {
+            background-color: #09090b;
+            background-image: radial-gradient(#18181b 1px, transparent 1px);
+            background-size: 20px 20px;
+        }
+        .custom-scrollbar::-webkit-scrollbar { width: 5px; height: 5px; }
+        .custom-scrollbar::-webkit-scrollbar-track { background: #09090b; }
+        .custom-scrollbar::-webkit-scrollbar-thumb { background: #27272a; border-radius: 4px; }
+        @media print {
+            body { background: white !important; color: black !important; }
+            header, section, .no-print { display: none !important; }
+            #print-container { display: block !important; }
+        }
+    </style>
+</head>
+<body class="canvas-bg text-zinc-100 min-h-screen flex flex-col font-sans antialiased selection:bg-zinc-800">
+
+    <!-- Sticky Operational Header -->
+    <header class="bg-zinc-900/90 border-b border-zinc-800/80 p-3 md:p-4 sticky top-0 z-50 backdrop-blur-md flex flex-wrap items-center justify-between gap-3">
+        <div class="flex items-center gap-2.5 min-w-0">
+            <div class="h-2.5 w-2.5 rounded-full bg-emerald-500 animate-pulse flex-shrink-0"></div>
+            <div class="min-w-0">
+                <h1 class="text-xs md:text-sm font-bold tracking-wider uppercase text-zinc-200 truncate">Grace Encounter Dispatch Matrix</h1>
+                <p id="global-stats" class="text-[10px] text-zinc-400 font-mono tracking-tight truncate">Loading manifest parameters...</p>
+            </div>
+        </div>
+
+        <!-- Quick Manifest Search -->
+        <div class="relative flex-1 max-w-xs min-w-[180px]">
+            <input type="text" id="search-input" oninput="handleSearch(this.value)" placeholder="🔍 Search name or phone..." 
+                class="w-full bg-zinc-950 border border-zinc-800 rounded-lg pl-2.5 pr-14 py-1.5 text-xs text-zinc-200 placeholder-zinc-500 focus:outline-none focus:border-zinc-700 font-mono">
+            <span id="search-count" class="absolute right-2 top-2 text-[10px] font-mono text-zinc-400 pointer-events-none"></span>
+        </div>
+
+        <div class="flex items-center gap-2 flex-shrink-0">
+            <button onclick="sortVansByNumber()" class="bg-zinc-800/90 hover:bg-zinc-700 text-zinc-300 border border-zinc-700/60 px-2 py-1.5 rounded-lg text-[11px] font-semibold transition-all" title="Sort vans by Van Number">
+                🔢 Sort Vans
+            </button>
+            <button onclick="addNewVan()" class="bg-zinc-800/90 hover:bg-zinc-700 text-zinc-200 border border-zinc-700/60 px-2.5 py-1.5 rounded-lg text-[11px] font-semibold transition-all" title="Add a new empty van">
+                + New Van
+            </button>
+            <button onclick="openModal('paste-modal')" class="bg-blue-600 hover:bg-blue-500 text-white px-2.5 py-1.5 rounded-lg text-[11px] font-semibold transition-all shadow-sm">
+                📥 Load / Overwrite Text
+            </button>
+            <button onclick="openExportModal()" class="bg-zinc-800 hover:bg-zinc-700 text-zinc-300 border border-zinc-700/60 px-2.5 py-1.5 rounded-lg text-[11px] font-semibold transition-all" title="View printable roster & summary">
+                📋 Manifest
+            </button>
+            <button onclick="clearLocalStorageContext()" class="text-zinc-500 hover:text-red-400 p-1.5 transition-all text-xs" title="Reset Local Engine Storage Cache">⚠️ Reset</button>
+        </div>
+    </header>
+
+    <!-- Interactive Canvas & Responsive Board Area -->
+    <main class="flex-1 p-3 md:p-6 overflow-auto grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4 md:gap-6 items-start" id="canvas-grid">
+        <div id="empty-state" class="col-span-full text-center py-24 text-zinc-600">
+            <p class="text-sm font-medium text-zinc-400">No active vehicle nodes initialized.</p>
+            <p class="text-[11px] mt-1 text-zinc-500 max-w-xs mx-auto">Tap "Load / Overwrite Text" to paste your van list with labeled headers like "LEADER: JOSHUA FRANCIS (14)".</p>
+        </div>
+    </main>
+
+    <!-- Lower Stack Drawer for Quick Swaps -->
+    <section class="bg-zinc-950 border-t border-zinc-800/80 p-3 grid grid-cols-1 md:grid-cols-2 gap-3 sticky bottom-0 z-40 max-h-44 overflow-hidden">
+        <div class="flex flex-col h-full min-h-[90px]">
+            <h3 class="text-[10px] font-bold uppercase tracking-widest text-amber-500 mb-1 flex justify-between items-center">
+                <span>🔄 Standby Waitlist Pool</span>
+                <span id="reserve-count" class="bg-zinc-900 px-1.5 py-0.5 rounded text-zinc-400 font-mono text-[9px]">0</span>
+            </h3>
+            <div id="reserve-deck" class="flex-1 overflow-x-auto flex gap-2 pb-1 custom-scrollbar items-center"></div>
+        </div>
+        <div class="flex flex-col h-full min-h-[90px] border-t md:border-t-0 md:border-l border-zinc-900 pt-2 md:pt-0 md:pl-4">
+            <h3 class="text-[10px] font-bold uppercase tracking-widest text-rose-500 mb-1 flex justify-between items-center">
+                <span>📁 Displaced Log Cache</span>
+                <span id="archive-count" class="bg-zinc-900 px-1.5 py-0.5 rounded text-zinc-400 font-mono text-[9px]">0</span>
+            </h3>
+            <div id="archive-deck" class="flex-1 overflow-x-auto flex gap-2 pb-1 custom-scrollbar items-center"></div>
+        </div>
+    </section>
+
+    <!-- Paste Ingestion Modal Overlay -->
+    <div id="paste-modal" class="fixed inset-0 bg-black/85 backdrop-blur-xs z-50 hidden flex items-center justify-center p-3">
+        <div class="bg-zinc-900 border border-zinc-800 rounded-xl w-full max-w-2xl flex flex-col max-h-[85vh] shadow-2xl">
+            <div class="p-3 border-b border-zinc-800 flex justify-between items-center">
+                <h2 class="text-[11px] font-bold uppercase tracking-wider text-zinc-300">Master Data Import Pipeline</h2>
+                <button onclick="closeModal('paste-modal')" class="text-zinc-500 hover:text-zinc-300 text-sm px-1">✕</button>
+            </div>
+            <div class="p-4 flex-1 flex flex-col gap-2 overflow-y-auto">
+                <div class="text-[11px] text-zinc-400 bg-zinc-950 p-2.5 border border-zinc-800 rounded-lg leading-relaxed">
+                    <strong>Smart Multi-Van Ingestion Active:</strong> Paste labelled blocks (e.g. <code>LEADER: JOSHUA FRANCIS (14)</code> or <code>LEADER: EUGENE (0713060683) (2)</code> separated by <code>===</code>). Each van and leader is cleanly parsed. Existing attendance and confirmations are preserved across updates!
+                </div>
+                <textarea id="raw-input" class="flex-1 min-h-[250px] bg-zinc-950 border border-zinc-800 rounded-lg p-2.5 text-xs text-emerald-400 focus:outline-none focus:border-zinc-700 font-mono custom-scrollbar" placeholder="Paste your labelled van block here, e.g.:
+
+==================================================
+LEADER: JOSHUA FRANCIS (14)
+==================================================
+1. Faith - 0117415933
+2. Clinton - 0728551634
+..."></textarea>
+            </div>
+            <div class="p-3 border-t border-zinc-800 bg-zinc-950/50 flex justify-between items-center gap-2">
+                <button onclick="document.getElementById('raw-input').value = ''" class="text-zinc-500 hover:text-zinc-400 text-xs px-2 py-1">Clear Text</button>
+                <div class="flex gap-2">
+                    <button onclick="closeModal('paste-modal')" class="bg-zinc-800 text-zinc-400 px-3 py-1.5 rounded-lg text-xs font-semibold hover:bg-zinc-700">Cancel</button>
+                    <button onclick="processPlaintext()" class="bg-blue-600 text-white px-4 py-1.5 rounded-lg text-xs font-semibold hover:bg-blue-500 transition-colors shadow-sm">Inject & Clean Sync</button>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Mobile Communications Hub Drawer -->
+    <div id="comm-modal" class="fixed inset-0 bg-black/85 backdrop-blur-xs z-50 hidden flex items-end sm:items-center justify-center p-3">
+        <div class="bg-zinc-900 border border-zinc-800 rounded-t-xl sm:rounded-xl w-full max-w-sm p-5 shadow-2xl text-center transform transition-transform">
+            <div class="w-10 h-1 bg-zinc-800 rounded-full mx-auto mb-4 sm:hidden"></div>
+            <h3 id="comm-name" class="text-sm font-bold text-zinc-200 truncate">---</h3>
+            <p id="comm-phone" class="text-[11px] font-mono text-zinc-500 mt-0.5 mb-5">---</p>
+            
+            <div class="space-y-2.5">
+                <a id="action-wa" href="#" target="_blank" class="w-full bg-emerald-600 hover:bg-emerald-500 text-white py-2.5 rounded-lg font-semibold text-xs flex items-center justify-center gap-2 transition-all">
+                    <span>💬</span> WhatsApp Direct Message
+                </a>
+                <a id="action-sms" href="#" class="w-full bg-zinc-800 hover:bg-zinc-700 border border-zinc-700 text-zinc-200 py-2.5 rounded-lg font-semibold text-xs flex items-center justify-center gap-2 transition-all">
+                    <span>✉️</span> Standard SMS Template
+                </a>
+                <a id="action-tel" href="#" class="w-full bg-blue-600 hover:bg-blue-500 text-white py-2.5 rounded-lg font-semibold text-xs flex items-center justify-center gap-2 transition-all">
+                    <span>📞</span> Open Native Phone Caller
+                </a>
+            </div>
+            <button onclick="closeModal('comm-modal')" class="mt-5 text-[11px] text-zinc-500 hover:text-zinc-400 block mx-auto py-1">Dismiss Canvas Action</button>
+        </div>
+    </div>
+
+    <!-- Van Manager Dedicated Manifest Modal -->
+    <div id="van-manager-modal" class="fixed inset-0 bg-black/85 backdrop-blur-xs z-50 hidden flex items-center justify-center p-3">
+        <div class="bg-zinc-900 border border-zinc-800 rounded-xl w-full max-w-2xl flex flex-col max-h-[85vh] shadow-2xl">
+            <div class="p-3 border-b border-zinc-800 flex justify-between items-center">
+                <div>
+                    <h2 id="vm-title" class="text-xs font-bold uppercase tracking-wider text-zinc-200 truncate">Van Manifest</h2>
+                    <p id="vm-subtitle" class="text-[10px] font-mono text-zinc-500">14 Capacity Operational Sheet</p>
+                </div>
+                <button onclick="closeModal('van-manager-modal')" class="text-zinc-500 hover:text-zinc-300 text-sm px-1">✕</button>
+            </div>
+            <div id="vm-body" class="p-4 flex-1 overflow-y-auto space-y-2 custom-scrollbar text-xs"></div>
+            <div class="p-3 border-t border-zinc-800 bg-zinc-950/50 flex flex-wrap justify-between gap-2 items-center">
+                <button onclick="copyVanForWhatsApp()" class="bg-emerald-700 hover:bg-emerald-600 text-white px-3 py-1.5 rounded-lg text-xs font-semibold flex items-center gap-1.5 transition-colors">
+                    📋 Copy for WhatsApp Group
+                </button>
+                <div class="flex gap-2">
+                    <button onclick="downloadVanOfflineHtml()" class="bg-zinc-800 hover:bg-zinc-700 text-zinc-300 px-3 py-1.5 rounded-lg text-xs font-semibold transition-colors">
+                        📥 Save Offline File
+                    </button>
+                    <button onclick="closeModal('van-manager-modal')" class="bg-zinc-800 text-zinc-400 px-3 py-1.5 rounded-lg text-xs font-semibold hover:bg-zinc-700">Close</button>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Full Manifest Export / Overview Modal -->
+    <div id="export-modal" class="fixed inset-0 bg-black/85 backdrop-blur-xs z-50 hidden flex items-center justify-center p-3">
+        <div class="bg-zinc-900 border border-zinc-800 rounded-xl w-full max-w-3xl flex flex-col max-h-[90vh] shadow-2xl">
+            <div class="p-3 border-b border-zinc-800 flex justify-between items-center">
+                <div>
+                    <h2 class="text-xs font-bold uppercase tracking-wider text-zinc-200">Grace Encounter Master Dispatch Manifest</h2>
+                    <p id="export-summary-text" class="text-[10px] font-mono text-zinc-500"></p>
+                </div>
+                <button onclick="closeModal('export-modal')" class="text-zinc-500 hover:text-zinc-300 text-sm px-1">✕</button>
+            </div>
+            <div id="export-content" class="p-4 flex-1 overflow-y-auto space-y-4 custom-scrollbar text-xs font-mono"></div>
+            <div class="p-3 border-t border-zinc-800 bg-zinc-950/50 flex justify-between items-center gap-2">
+                <button onclick="copyFullManifestText()" class="bg-zinc-800 hover:bg-zinc-700 text-zinc-300 px-3 py-1.5 rounded-lg text-xs font-semibold">📋 Copy Master Summary</button>
+                <div class="flex gap-2">
+                    <button onclick="window.print()" class="bg-blue-600 hover:bg-blue-500 text-white px-3 py-1.5 rounded-lg text-xs font-semibold">🖨️ Print / Save PDF</button>
+                    <button onclick="closeModal('export-modal')" class="bg-zinc-800 text-zinc-400 px-3 py-1.5 rounded-lg text-xs font-semibold hover:bg-zinc-700">Close</button>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Toast Notification Overlay -->
+    <div id="toast" class="fixed bottom-24 left-1/2 -translate-x-1/2 bg-zinc-800/95 border border-zinc-700 text-zinc-200 text-xs px-3.5 py-2 rounded-full shadow-2xl transition-opacity duration-300 opacity-0 pointer-events-none z-50 font-medium"></div>
+
+    <!-- System Memory & View Layer Controller -->
+    <script>
+        const STORAGE_KEY = "GRACE_ENCOUNTER_DISPATCH_STATE";
+        const RECON_REGISTRY_KEY = "GRACE_ENCOUNTER_MGR_RECONCILIATION";
+        const MAX_CAPACITY = 14;
+
+        let appState = { vans: {}, vanMeta: {}, reserves: [], archives: [], trackingRegistry: {} };
+        let managerEdits = {};
+        let currentSearchQuery = '';
+        let activeVanIndexForModal = null;
+        let draggedItem = null;
+
+        function openModal(id) { 
+            const el = document.getElementById(id);
+            if (el) el.classList.remove('hidden'); 
+        }
+        
+        function closeModal(id) { 
+            const el = document.getElementById(id);
+            if (el) el.classList.add('hidden'); 
+        }
+
+        function showToast(message) {
+            const toast = document.getElementById('toast');
+            if (!toast) return;
+            toast.innerText = message;
+            toast.classList.remove('opacity-0');
+            toast.classList.add('opacity-100');
+            setTimeout(() => {
+                toast.classList.remove('opacity-100');
+                toast.classList.add('opacity-0');
+            }, 2500);
+        }
+
+        function escapeHtml(str) {
+            if (!str) return '';
+            return String(str)
+                .replace(/&/g, '&amp;')
+                .replace(/</g, '&lt;')
+                .replace(/>/g, '&gt;')
+                .replace(/"/g, '&quot;')
+                .replace(/'/g, '&#039;');
+        }
+
+        function cleanPhone(rawPhone) {
+            if (!rawPhone || typeof rawPhone !== 'string') return '';
+            let firstPart = rawPhone.split('/')[0].trim();
+            let digits = firstPart.replace(/\D/g, '');
+            if (digits.startsWith('254') && digits.length >= 11) {
+                digits = '0' + digits.substring(3);
+            }
+            return digits;
+        }
+
+        function clearLocalStorageContext() {
+            if (confirm("Completely reset local device database adjustments? This clears checked checkmarks, van groupings, and custom name corrections.")) {
+                localStorage.removeItem(STORAGE_KEY);
+                localStorage.removeItem(RECON_REGISTRY_KEY);
+                location.reload();
+            }
+        }
+
+        function commitToDeviceStorage() {
+            try {
+                localStorage.setItem(STORAGE_KEY, JSON.stringify(appState));
+                localStorage.setItem(RECON_REGISTRY_KEY, JSON.stringify(managerEdits));
+            } catch (err) {
+                console.error("Storage save error:", err);
+            }
+        }
+
+        function hydrateFromDeviceStorage() {
+            try {
+                const rawState = localStorage.getItem(STORAGE_KEY);
+                const rawEdits = localStorage.getItem(RECON_REGISTRY_KEY);
+                
+                if (rawEdits) managerEdits = JSON.parse(rawEdits);
+                if (rawState) {
+                    appState = JSON.parse(rawState);
+                    if (!appState.vanMeta) appState.vanMeta = {};
+                    rebuildTrackingRegistry();
+                    renderCanvas();
+                }
+            } catch (err) {
+                console.error("Storage hydration error:", err);
+            }
+        }
+
+        function rebuildTrackingRegistry() {
+            let registry = {};
+            if (!appState.vans) appState.vans = {};
+            Object.values(appState.vans).forEach(list => {
+                if (Array.isArray(list)) {
+                    list.forEach(p => {
+                        let clean = cleanPhone(p.phone);
+                        if (clean && clean !== 'No Phone') {
+                            registry[clean] = (registry[clean] || 0) + 1;
+                        }
+                    });
+                }
+            });
+            appState.trackingRegistry = registry;
+        }
+
+        function extractPassengerFromLine(rawLine) {
+            if (!rawLine || typeof rawLine !== 'string') return null;
+            let line = rawLine.trim();
+            if (!line) return null;
+            
+            // Normalize unicode mathematical bold/italic characters to standard ASCII
+            if (line.normalize) {
+                line = line.normalize('NFKD').replace(/[\u0300-\u036f]/g, '');
+            }
+
+            // Ignore pure headers or dividers
+            if (/^(?:name|phone|register|kindly note|===|---|number)/i.test(line)) return null;
+
+            // Check if phone comes first, e.g. "671.0119711068 add Rihanns Angila"
+            const phoneFirstMatch = line.match(/^\d+[\s.:)]*\s*(\+?254\d{8,11}|0[17]\d{7,10})\s*(?:add\s+)?(.*)/i);
+            if (phoneFirstMatch) {
+                let phone = cleanPhone(phoneFirstMatch[1]);
+                let name = phoneFirstMatch[2].replace(/[._-]+$/, '').trim();
+                if (name && phone) return { name, phone };
+            }
+
+            // Dual phone check separated by slash: "0758103291/ 0142829125"
+            const slashPhoneMatch = line.match(/((?:\+?254\s*|0)[17][\d\s.-]{7,13})\s*\/\s*((?:\+?254\s*|0)[17][\d\s.-]{7,13})/);
+            if (slashPhoneMatch) {
+                const rawPhones = slashPhoneMatch[0];
+                const primaryPhone = cleanPhone(slashPhoneMatch[1]);
+                const secondaryPhone = cleanPhone(slashPhoneMatch[2]);
+                const displayPhone = `${primaryPhone} / ${secondaryPhone}`;
+                
+                let namePart = line.replace(rawPhones, '').trim();
+                namePart = namePart.replace(/^[0-9oO]+[\s.:)]*/, '').trim();
+                namePart = namePart.replace(/[\s._:-]+$/, '').trim();
+                namePart = namePart.replace(/^[\s._:-]+/, '').trim();
+                if (!namePart) namePart = "Unnamed Passenger";
+                return { name: namePart, phone: displayPhone };
+            }
+
+            // Standard Kenyan phone search anywhere in the line (handles 9-digit typos, 10 digits, 11-digit typos)
+            const phoneRegex = /(?:\+?254\s*|0)[17](?:[\s.-]*\d){7,10}/g;
+            const phoneMatches = [...line.matchAll(phoneRegex)];
+            
+            if (phoneMatches.length > 0) {
+                const lastPhoneMatch = phoneMatches[phoneMatches.length - 1];
+                const rawPhone = lastPhoneMatch[0];
+                const phone = cleanPhone(rawPhone);
+                
+                let namePart = line.replace(rawPhone, '').trim();
+                // Strip index numbering e.g. "1.", "14 -", "50: ", "12Moses", "O."
+                namePart = namePart.replace(/^[0-9oO]+[\s.:)]*/, '').trim();
+                namePart = namePart.replace(/[\s._:-]+$/, '').trim();
+                namePart = namePart.replace(/^[\s._:-]+/, '').trim();
+
+                if (!namePart) namePart = "Unnamed Passenger";
+                return { name: namePart, phone: phone };
+            }
+
+            // Fallback for lines with name only e.g. "109.Meshack -"
+            const noPhoneMatch = line.match(/^[0-9oO]+[\s.:)]*(.+)/);
+            if (noPhoneMatch) {
+                let namePart = noPhoneMatch[1].replace(/[\s._:-]+$/, '').trim();
+                if (namePart && namePart.length > 1 && !/^(?:total|amount|mpesa|date)/i.test(namePart)) {
+                    return { name: namePart, phone: 'No Phone' };
+                }
+            }
+
+            return null;
+        }
+
+        function addPassengerToVan(vanList, parsed, rawLine) {
+            const originalName = parsed.name;
+            const phone = parsed.phone;
+
+            let isPresent = false;
+            let status = 'unconfirmed';
+            let displayName = originalName;
+
+            const editKey = (phone && phone !== 'No Phone') ? cleanPhone(phone) : originalName;
+            if (managerEdits[editKey]) {
+                if (managerEdits[editKey].isPresent !== undefined) isPresent = managerEdits[editKey].isPresent;
+                if (managerEdits[editKey].status !== undefined) status = managerEdits[editKey].status;
+                if (managerEdits[editKey].name) displayName = managerEdits[editKey].name;
+            }
+
+            vanList.push({
+                id: (crypto && crypto.randomUUID) ? crypto.randomUUID() : 'p_' + Date.now() + '_' + Math.random().toString(36).substr(2, 6),
+                name: displayName,
+                phone: phone,
+                isPresent: isPresent,
+                status: status,
+                isReplacement: rawLine.includes('REPLACED:') || rawLine.includes('MARGIN ADDITION')
+            });
+        }
+
+        function processPlaintext() {
+            const rawInput = document.getElementById('raw-input');
+            const rawText = rawInput ? rawInput.value : '';
+            if (!rawText.trim()) return;
+
+            let updatedVans = {};
+            let updatedMeta = {};
+            const normalizedRaw = rawText.normalize ? rawText.normalize('NFKD') : rawText;
+
+            // Check if input has explicit van/leader sections
+            const hasLeaderHeaders = /leader\s*:/i.test(normalizedRaw) || /^(?:van|matatu)\s*#?\d+/im.test(normalizedRaw);
+
+            if (hasLeaderHeaders) {
+                const lines = normalizedRaw.split(/\r?\n/);
+                let currentVanKey = null;
+
+                for (let i = 0; i < lines.length; i++) {
+                    let line = lines[i].trim();
+                    if (!line) continue;
+
+                    // Skip divider lines (===, ---, ***, etc.)
+                    if (/^[=\-_*#~]{3,}$/.test(line)) {
+                        continue;
+                    }
+
+                    // Check if this is a LEADER or VAN header line
+                    if (/^leader\s*:/i.test(line) || /^(?:van|matatu|vehicle|bus)\s*#?\d+/i.test(line)) {
+                        let rawHeader = line;
+                        if (/^leader\s*:/i.test(line)) {
+                            rawHeader = line.replace(/^leader\s*:\s*/i, '').trim();
+                        }
+
+                        let leaderPhone = '';
+                        let vanNum = '';
+
+                        // Extract leader phone if present e.g. (0713060683) or 0713060683
+                        const phoneMatch = rawHeader.match(/\(?((?:\+?254|0)[17]\d{8})\)?/);
+                        if (phoneMatch) {
+                            leaderPhone = cleanPhone(phoneMatch[1]);
+                            rawHeader = rawHeader.replace(phoneMatch[0], '').trim();
+                        }
+
+                        // Extract van number if present at the end e.g. (14) or (2) or (26)
+                        const vanNumMatch = rawHeader.match(/\((\d+)\)\s*$/);
+                        if (vanNumMatch) {
+                            vanNum = vanNumMatch[1];
+                            rawHeader = rawHeader.replace(/\(\d+\)\s*$/, '').trim();
+                        } else {
+                            const startVanMatch = line.match(/^(?:van|matatu|vehicle|bus)\s*#?(\d+)/i);
+                            if (startVanMatch) {
+                                vanNum = startVanMatch[1];
+                            }
+                        }
+
+                        let leaderName = rawHeader.replace(/[=_-]+$/, '').trim();
+                        leaderName = leaderName.replace(/^[=_-]+/, '').trim();
+
+                        let vanKey = '';
+                        if (vanNum && leaderName) {
+                            vanKey = `Van ${vanNum} - ${leaderName}`;
+                        } else if (vanNum) {
+                            vanKey = `Van ${vanNum}`;
+                        } else if (leaderName) {
+                            vanKey = `Leader: ${leaderName}`;
+                        } else {
+                            vanKey = `Van ${Object.keys(updatedVans).length + 1}`;
+                        }
+
+                        // Ensure unique key if duplicate names appear
+                        let uniqueKey = vanKey;
+                        let counter = 2;
+                        while (updatedVans[uniqueKey]) {
+                            uniqueKey = `${vanKey} (${counter})`;
+                            counter++;
+                        }
+
+                        currentVanKey = uniqueKey;
+                        updatedVans[currentVanKey] = [];
+                        updatedMeta[currentVanKey] = {
+                            leaderName: leaderName,
+                            leaderPhone: leaderPhone,
+                            vanNumber: vanNum
+                        };
+                        continue;
+                    }
+
+                    // Passenger line (supports multiple entries on one line)
+                    const subEntries = line.split(/\s{4,}|\t+/);
+                    subEntries.forEach(sub => {
+                        const parsed = extractPassengerFromLine(sub);
+                        if (parsed) {
+                            if (!currentVanKey) {
+                                currentVanKey = "Van 1 (Leader Pending)";
+                                if (!updatedVans[currentVanKey]) {
+                                    updatedVans[currentVanKey] = [];
+                                    updatedMeta[currentVanKey] = { leaderName: 'Pending', leaderPhone: '', vanNumber: '1' };
+                                }
+                            }
+                            addPassengerToVan(updatedVans[currentVanKey], parsed, sub);
+                        }
+                    });
+                }
+            } else {
+                // Flat unstructured list: split into lines (and multiple entries per line), auto-chunk to 14/van
+                const rawLines = normalizedRaw.split(/\r?\n/).map(l => l.trim()).filter(Boolean);
+                let allPassengers = [];
+                rawLines.forEach(l => {
+                    if (/^[=\-_*#~]{3,}$/.test(l)) return;
+                    const subParts = l.split(/\s{4,}|\t+/);
+                    subParts.forEach(sub => {
+                        const parsed = extractPassengerFromLine(sub);
+                        if (parsed) allPassengers.push({ parsed, line: sub });
+                    });
+                });
+
+                if (allPassengers.length === 0) {
+                    alert("Could not detect any passenger names or numbers in the pasted text.");
+                    return;
+                }
+
+                let vanIndex = 1;
+                let currentVanName = `Van 1`;
+                updatedVans[currentVanName] = [];
+                updatedMeta[currentVanName] = { leaderName: `Van ${vanIndex}`, leaderPhone: '', vanNumber: `${vanIndex}` };
+
+                allPassengers.forEach(({ parsed, line }) => {
+                    if (updatedVans[currentVanName].length >= MAX_CAPACITY) {
+                        vanIndex++;
+                        currentVanName = `Van ${vanIndex}`;
+                        updatedVans[currentVanName] = [];
+                        updatedMeta[currentVanName] = { leaderName: `Van ${vanIndex}`, leaderPhone: '', vanNumber: `${vanIndex}` };
+                    }
+                    addPassengerToVan(updatedVans[currentVanName], parsed, line);
+                });
+            }
+
+            appState.vans = updatedVans;
+            appState.vanMeta = updatedMeta;
+            rebuildTrackingRegistry();
+            commitToDeviceStorage();
+            closeModal('paste-modal');
+            renderCanvas();
+            
+            const vanCount = Object.keys(updatedVans).length;
+            let totalCount = 0;
+            Object.values(updatedVans).forEach(v => totalCount += v.length);
+            showToast(`Loaded ${vanCount} Vans (${totalCount} Passengers) Successfully!`);
+        }
+
+        function sortVansByNumber() {
+            const keys = Object.keys(appState.vans);
+            if (keys.length === 0) return;
+
+            keys.sort((a, b) => {
+                const numA = parseInt((a.match(/\b\d+\b/) || [9999])[0], 10);
+                const numB = parseInt((b.match(/\b\d+\b/) || [9999])[0], 10);
+                if (numA !== numB) return numA - numB;
+                return a.localeCompare(b);
+            });
+
+            let sortedVans = {};
+            let sortedMeta = {};
+            keys.forEach(k => {
+                sortedVans[k] = appState.vans[k];
+                if (appState.vanMeta && appState.vanMeta[k]) sortedMeta[k] = appState.vanMeta[k];
+            });
+
+            appState.vans = sortedVans;
+            appState.vanMeta = sortedMeta;
+            commitToDeviceStorage();
+            renderCanvas();
+            showToast("Sorted vans by number!");
+        }
+
+        function addNewVan() {
+            const keys = Object.keys(appState.vans);
+            const nextIndex = keys.length + 1;
+            const name = prompt("Enter new Van or Leader name:", `Van ${nextIndex}`);
+            if (!name || !name.trim()) return;
+            const cleanName = name.trim();
+            if (appState.vans[cleanName]) {
+                alert("A van with this name already exists.");
+                return;
+            }
+            appState.vans[cleanName] = [];
+            if (!appState.vanMeta) appState.vanMeta = {};
+            appState.vanMeta[cleanName] = { leaderName: cleanName, leaderPhone: '', vanNumber: `${nextIndex}` };
+            commitToDeviceStorage();
+            renderCanvas();
+            showToast(`Added ${cleanName}`);
+        }
+
+        function renameVanByIndex(vIdx, newName) {
+            const keys = Object.keys(appState.vans);
+            const oldKey = keys[vIdx];
+            if (!oldKey || !newName || !newName.trim() || oldKey === newName.trim()) return;
+            const cleanNew = newName.trim();
+            
+            let newVans = {};
+            let newMeta = {};
+            keys.forEach(k => {
+                if (k === oldKey) {
+                    newVans[cleanNew] = appState.vans[oldKey];
+                    if (appState.vanMeta && appState.vanMeta[oldKey]) newMeta[cleanNew] = appState.vanMeta[oldKey];
+                } else {
+                    newVans[k] = appState.vans[k];
+                    if (appState.vanMeta && appState.vanMeta[k]) newMeta[k] = appState.vanMeta[k];
+                }
+            });
+            appState.vans = newVans;
+            appState.vanMeta = newMeta;
+            commitToDeviceStorage();
+            renderCanvas();
+            showToast(`Renamed to ${cleanNew}`);
+        }
+
+        function deleteVanByIndex(vIdx) {
+            const keys = Object.keys(appState.vans);
+            const key = keys[vIdx];
+            if (!key) return;
+            const passCount = appState.vans[key] ? appState.vans[key].length : 0;
+            if (passCount > 0) {
+                if (!confirm(`Move ${passCount} passengers from "${key}" to Standby Pool and remove this van?`)) return;
+                appState.reserves.push(...appState.vans[key]);
+            } else {
+                if (!confirm(`Delete empty van "${key}"?`)) return;
+            }
+            delete appState.vans[key];
+            if (appState.vanMeta && appState.vanMeta[key]) delete appState.vanMeta[key];
+            rebuildTrackingRegistry();
+            commitToDeviceStorage();
+            renderCanvas();
+            showToast(`Removed van "${key}"`);
+        }
+
+        function addPassengerToVanByIndex(vIdx) {
+            const keys = Object.keys(appState.vans);
+            const key = keys[vIdx];
+            if (!key) return;
+            const name = prompt(`Enter passenger name for ${key}:`);
+            if (!name || !name.trim()) return;
+            const phone = prompt(`Enter phone number for ${name.trim()}:`) || 'No Phone';
+
+            appState.vans[key].push({
+                id: (crypto && crypto.randomUUID) ? crypto.randomUUID() : 'p_' + Date.now(),
+                name: name.trim(),
+                phone: cleanPhone(phone) || phone.trim(),
+                isPresent: false,
+                status: 'unconfirmed',
+                isReplacement: false
+            });
+            rebuildTrackingRegistry();
+            commitToDeviceStorage();
+            renderCanvas();
+            showToast(`Added ${name.trim()} to ${key}`);
+        }
+
+        function updateInlineFieldByIndex(vIdx, pIdx, field, value) {
+            const keys = Object.keys(appState.vans);
+            const key = keys[vIdx];
+            if (!key || !appState.vans[key] || !appState.vans[key][pIdx]) return;
+            
+            const passenger = appState.vans[key][pIdx];
+            passenger[field] = value;
+
+            const editKey = (passenger.phone && passenger.phone !== 'No Phone') ? cleanPhone(passenger.phone) : passenger.name;
+            if (!managerEdits[editKey]) managerEdits[editKey] = {};
+            managerEdits[editKey][field] = value;
+
+            if (field === 'phone') {
+                rebuildTrackingRegistry();
+                commitToDeviceStorage();
+                renderCanvas();
+            } else if (field === 'isPresent' || field === 'status') {
+                commitToDeviceStorage();
+                renderCanvas();
+            } else {
+                commitToDeviceStorage();
+            }
+        }
+
+        function moveToReserveByIndex(vIdx, pIdx) {
+            const keys = Object.keys(appState.vans);
+            const key = keys[vIdx];
+            if (!key || !appState.vans[key] || !appState.vans[key][pIdx]) return;
+
+            const passenger = appState.vans[key].splice(pIdx, 1)[0];
+            appState.reserves.push(passenger);
+            rebuildTrackingRegistry();
+            commitToDeviceStorage();
+            renderCanvas();
+            showToast(`Moved ${passenger.name} to Standby Pool`);
+        }
+
+        function swapToReserveByIndex(vIdx, pIdx) {
+            const keys = Object.keys(appState.vans);
+            const key = keys[vIdx];
+            if (!key || !appState.vans[key] || !appState.vans[key][pIdx]) return;
+
+            const passenger = appState.vans[key][pIdx];
+            appState.archives.push(passenger);
+
+            if (appState.reserves.length > 0) {
+                const replacement = appState.reserves.shift();
+                appState.vans[key][pIdx] = replacement;
+                showToast(`Swapped ${passenger.name} with ${replacement.name}`);
+            } else {
+                appState.vans[key].splice(pIdx, 1);
+                showToast(`Displaced ${passenger.name} (Standby empty)`);
+            }
+            rebuildTrackingRegistry();
+            commitToDeviceStorage();
+            renderCanvas();
+        }
+
+        function promoteFromReserveByIndex(vIdx) {
+            const keys = Object.keys(appState.vans);
+            const key = keys[vIdx];
+            if (!key || !appState.vans[key]) return;
+
+            if (appState.vans[key].length >= MAX_CAPACITY) {
+                alert(`Layout restriction: Van caps at ${MAX_CAPACITY} members.`);
+                return;
+            }
+            if (appState.reserves.length === 0) {
+                showToast("Standby reserve pool is currently empty.");
+                return;
+            }
+            const promoted = appState.reserves.shift();
+            appState.vans[key].push(promoted);
+            rebuildTrackingRegistry();
+            commitToDeviceStorage();
+            renderCanvas();
+            showToast(`Added ${promoted.name} from Standby`);
+        }
+
+        function restoreFromStandby(reserveIdx) {
+            const p = appState.reserves[reserveIdx];
+            if (!p) return;
+            const keys = Object.keys(appState.vans);
+            if (keys.length === 0) {
+                alert("No vans available. Please create or load a van first.");
+                return;
+            }
+            const targetKey = keys.find(k => appState.vans[k].length < MAX_CAPACITY) || keys[0];
+            appState.reserves.splice(reserveIdx, 1);
+            appState.vans[targetKey].push(p);
+            rebuildTrackingRegistry();
+            commitToDeviceStorage();
+            renderCanvas();
+            showToast(`Restored ${p.name} to ${targetKey}`);
+        }
+
+        function removeReserve(reserveIdx) {
+            if (confirm("Remove passenger from Standby?")) {
+                appState.reserves.splice(reserveIdx, 1);
+                commitToDeviceStorage();
+                renderCanvas();
+            }
+        }
+
+        function restoreFromArchive(archiveIdx) {
+            const p = appState.archives.splice(archiveIdx, 1)[0];
+            if (!p) return;
+            appState.reserves.push(p);
+            commitToDeviceStorage();
+            renderCanvas();
+            showToast(`Restored ${p.name} to Standby Pool`);
+        }
+
+        function clearArchive() {
+            if (appState.archives.length === 0) return;
+            if (confirm("Clear all displaced records?")) {
+                appState.archives = [];
+                commitToDeviceStorage();
+                renderCanvas();
+            }
+        }
+
+        // Drag and Drop functionality between vans
+        function handleDragStart(e, vIdx, pIdx) {
+            draggedItem = { vIdx, pIdx };
+            if (e.dataTransfer) {
+                e.dataTransfer.effectAllowed = 'move';
+                e.dataTransfer.setData('text/plain', `${vIdx},${pIdx}`);
+            }
+        }
+
+        function handleDragOver(e) {
+            e.preventDefault();
+            if (e.dataTransfer) e.dataTransfer.dropEffect = 'move';
+        }
+
+        function handleDrop(e, targetVIdx) {
+            e.preventDefault();
+            if (!draggedItem) return;
+            const { vIdx: srcVIdx, pIdx: srcPIdx } = draggedItem;
+            draggedItem = null;
+
+            const keys = Object.keys(appState.vans);
+            const srcKey = keys[srcVIdx];
+            const targetKey = keys[targetVIdx];
+
+            if (!srcKey || !targetKey || srcKey === targetKey) return;
+
+            const passenger = appState.vans[srcKey].splice(srcPIdx, 1)[0];
+            if (passenger) {
+                appState.vans[targetKey].push(passenger);
+                commitToDeviceStorage();
+                renderCanvas();
+                showToast(`Moved ${passenger.name} to ${targetKey}`);
+            }
+        }
+
+        function triggerCommHub(name, phone) {
+            document.getElementById('comm-name').innerText = name;
+            document.getElementById('comm-phone').innerText = phone;
+
+            let clean = cleanPhone(phone);
+            let intl = clean;
+            if (clean.startsWith('0')) {
+                intl = '254' + clean.substring(1);
+            } else if (clean.length === 9) {
+                intl = '254' + clean;
+            }
+
+            const msgTemplate = encodeURIComponent(`Hey ${name}, reaching out regarding your seat assignment for the Grace Encounter dispatch listing. Let us know if you're en route!`);
+
+            const waBtn = document.getElementById('action-wa');
+            const smsBtn = document.getElementById('action-sms');
+            const telBtn = document.getElementById('action-tel');
+
+            if (clean && clean !== 'No Phone') {
+                waBtn.href = `https://wa.me/${intl}?text=${msgTemplate}`;
+                smsBtn.href = `sms:${clean}?body=${msgTemplate}`;
+                telBtn.href = `tel:${clean}`;
+                waBtn.classList.remove('opacity-40', 'pointer-events-none');
+                smsBtn.classList.remove('opacity-40', 'pointer-events-none');
+                telBtn.classList.remove('opacity-40', 'pointer-events-none');
+            } else {
+                waBtn.removeAttribute('href');
+                smsBtn.removeAttribute('href');
+                telBtn.removeAttribute('href');
+                waBtn.classList.add('opacity-40', 'pointer-events-none');
+                smsBtn.classList.add('opacity-40', 'pointer-events-none');
+                telBtn.classList.add('opacity-40', 'pointer-events-none');
+            }
+
+            openModal('comm-modal');
+        }
+
+        function handleSearch(query) {
+            currentSearchQuery = (query || '').trim().toLowerCase();
+            renderCanvas();
+        }
+
+        function highlightPhone(phone) {
+            const input = document.getElementById('search-input');
+            if (input) {
+                input.value = cleanPhone(phone);
+                handleSearch(cleanPhone(phone));
+            }
+        }
+
+        function renderCanvas() {
+            const grid = document.getElementById('canvas-grid');
+            const placeholder = document.getElementById('empty-state');
+            if (!grid) return;
+
+            grid.innerHTML = '';
+            const keys = Object.keys(appState.vans);
+            let totalAssigned = 0;
+            let totalConfirmed = 0;
+            let matchCount = 0;
+
+            if (keys.length === 0) {
+                if (placeholder) {
+                    placeholder.classList.remove('hidden');
+                    grid.appendChild(placeholder);
+                }
+                updateLayoutCounters(0, 0, 0);
+                renderDrawers();
+                return;
+            }
+
+            if (placeholder) placeholder.classList.add('hidden');
+
+            keys.forEach((leader, vIdx) => {
+                const passengers = appState.vans[leader] || [];
+                const meta = (appState.vanMeta && appState.vanMeta[leader]) ? appState.vanMeta[leader] : {};
+                totalAssigned += passengers.length;
+                const isOverCap = passengers.length > MAX_CAPACITY;
+
+                // Search matching
+                const leaderMatches = currentSearchQuery && (
+                    leader.toLowerCase().includes(currentSearchQuery) ||
+                    (meta.leaderPhone && meta.leaderPhone.includes(currentSearchQuery))
+                );
+                
+                const matchingPassengers = passengers.filter(p => {
+                    if (!currentSearchQuery) return true;
+                    return p.name.toLowerCase().includes(currentSearchQuery) || 
+                           p.phone.includes(currentSearchQuery);
+                });
+
+                if (currentSearchQuery && !leaderMatches && matchingPassengers.length === 0) {
+                    return;
+                }
+
+                if (currentSearchQuery) {
+                    matchCount += matchingPassengers.length + (leaderMatches ? 1 : 0);
+                }
+
+                passengers.forEach(p => {
+                    if (p.isPresent || p.status === 'confirmed') totalConfirmed++;
+                });
+
+                const card = document.createElement('div');
+                card.className = `bg-zinc-900/90 border ${isOverCap ? 'border-rose-500 bg-rose-950/15' : 'border-zinc-800/80'} rounded-xl p-3 flex flex-col max-h-[500px] shadow-lg transition-all`;
+                card.ondragover = handleDragOver;
+                card.ondrop = (e) => handleDrop(e, vIdx);
+
+                let passengerRows = passengers.map((p, pIdx) => {
+                    let clean = cleanPhone(p.phone);
+                    let count = (clean && appState.trackingRegistry[clean]) ? appState.trackingRegistry[clean] : 1;
+                    let isDuplicate = count > 1;
+
+                    let bgStyle = 'bg-zinc-950/60 border-zinc-800/50';
+                    if (p.status === 'confirmed') bgStyle = 'bg-emerald-950/20 border-emerald-800/40';
+                    else if (p.status === 'declined') bgStyle = 'bg-rose-950/20 border-rose-800/40';
+                    else if (p.status === 'no_pickup') bgStyle = 'bg-amber-950/20 border-amber-800/40';
+
+                    const isHighlight = currentSearchQuery && (
+                        p.name.toLowerCase().includes(currentSearchQuery) || 
+                        p.phone.includes(currentSearchQuery)
+                    );
+
+                    return `
+                        <div draggable="true" ondragstart="handleDragStart(event, ${vIdx}, ${pIdx})" 
+                            class="p-2 rounded-lg border ${bgStyle} ${isHighlight ? 'ring-2 ring-blue-500/80' : ''} flex flex-col gap-1.5 transition-all text-xs cursor-grab active:cursor-grabbing">
+                            <div class="flex items-center justify-between gap-1.5">
+                                <div class="flex items-center gap-2 min-w-0 flex-1">
+                                    <input type="checkbox" ${p.isPresent ? 'checked' : ''} 
+                                        onchange="updateInlineFieldByIndex(${vIdx}, ${pIdx}, 'isPresent', this.checked)"
+                                        class="h-4 w-4 rounded border-zinc-700 bg-zinc-800 text-blue-600 focus:ring-0 focus:ring-offset-0 cursor-pointer flex-shrink-0"
+                                        title="Mark Present on Boarding">
+                                    <input type="text" value="${escapeHtml(p.name)}" 
+                                        onchange="updateInlineFieldByIndex(${vIdx}, ${pIdx}, 'name', this.value)"
+                                        class="bg-transparent text-zinc-200 font-medium text-xs truncate focus:outline-none focus:bg-zinc-800 px-1 py-0.5 rounded w-full"
+                                        title="${escapeHtml(p.name)}">
+                                    ${isDuplicate ? `<button onclick="highlightPhone('${p.phone}')" class="text-[9px] bg-amber-950 border border-amber-800/80 text-amber-400 px-1 py-0.5 rounded font-mono flex-shrink-0 hover:bg-amber-900" title="Phone appears ${count} times. Click to find all.">Dup (${count})</button>` : ''}
+                                    ${p.isReplacement ? `<span class="text-[9px] bg-purple-950 border border-purple-800/80 text-purple-400 px-1 py-0.5 rounded font-mono flex-shrink-0">Sub</span>` : ''}
+                                </div>
+                                <button onclick="triggerCommHub('${escapeHtml(p.name)}', '${p.phone}')" 
+                                    class="text-[10px] font-mono text-zinc-400 hover:text-emerald-400 flex items-center gap-1 bg-zinc-800/80 hover:bg-zinc-700 px-1.5 py-0.5 rounded border border-zinc-700/50 flex-shrink-0 transition-colors"
+                                    title="Open WhatsApp, Call, or SMS">
+                                    📞 ${p.phone}
+                                </button>
+                            </div>
+                            <div class="flex items-center justify-between gap-1 pl-6 pt-0.5">
+                                <select onchange="updateInlineFieldByIndex(${vIdx}, ${pIdx}, 'status', this.value)" 
+                                    class="bg-zinc-900 border border-zinc-800 text-[10px] text-zinc-300 rounded px-1.5 py-0.5 focus:outline-none focus:border-zinc-600">
+                                    <option value="unconfirmed" ${p.status === 'unconfirmed' ? 'selected' : ''}>⏳ Pending</option>
+                                    <option value="confirmed" ${p.status === 'confirmed' ? 'selected' : ''}>✅ Confirmed</option>
+                                    <option value="declined" ${p.status === 'declined' ? 'selected' : ''}>❌ Declined</option>
+                                    <option value="no_pickup" ${p.status === 'no_pickup' ? 'selected' : ''}>⚠️ No Answer</option>
+                                </select>
+                                <div class="flex items-center gap-1">
+                                    <button onclick="moveToReserveByIndex(${vIdx}, ${pIdx})" 
+                                        class="text-[9px] text-zinc-500 hover:text-amber-400 bg-zinc-900 hover:bg-zinc-800 px-1.5 py-0.5 rounded border border-zinc-800 transition-colors"
+                                        title="Move to Standby Waitlist">
+                                        → Standby
+                                    </button>
+                                    <button onclick="swapToReserveByIndex(${vIdx}, ${pIdx})" 
+                                        class="text-[9px] text-zinc-500 hover:text-rose-400 bg-zinc-900 hover:bg-zinc-800 px-1.5 py-0.5 rounded border border-zinc-800 transition-colors"
+                                        title="Displace to archive & draw replacement">
+                                        ⇄ Swap
+                                    </button>
+                                </div>
+                            </div>
+                        </div>
+                    `;
+                }).join('');
+
+                card.innerHTML = `
+                    <div class="flex justify-between items-center border-b border-zinc-800 pb-2 mb-2 gap-2">
+                        <div class="min-w-0 flex-1">
+                            <input type="text" value="${escapeHtml(leader)}" 
+                                onchange="renameVanByIndex(${vIdx}, this.value)"
+                                class="bg-transparent text-xs font-bold text-zinc-200 uppercase tracking-wider truncate w-full focus:outline-none focus:bg-zinc-800 px-1 py-0.5 rounded"
+                                title="Click to rename van or leader">
+                            ${meta.leaderPhone ? `
+                                <div class="flex items-center gap-1 pl-1 mt-0.5">
+                                    <button onclick="triggerCommHub('${escapeHtml(meta.leaderName || leader)}', '${meta.leaderPhone}')" 
+                                        class="text-[9px] font-mono text-emerald-400 hover:text-emerald-300 flex items-center gap-1"
+                                        title="Contact Leader on WhatsApp or Phone">
+                                        📱 Leader: ${meta.leaderPhone}
+                                    </button>
+                                </div>
+                            ` : ''}
+                        </div>
+                        <div class="flex items-center gap-1.5 flex-shrink-0">
+                            <span class="text-[10px] font-mono font-bold px-1.5 py-0.5 rounded ${passengers.length >= MAX_CAPACITY ? 'bg-rose-500/20 text-rose-400 border border-rose-500/30' : 'bg-zinc-800 text-zinc-400'}">
+                                ${passengers.length}/${MAX_CAPACITY}
+                            </span>
+                            <button onclick="openVanManagerModal(${vIdx})" class="text-[10px] bg-zinc-800 hover:bg-zinc-700 text-zinc-300 px-1.5 py-0.5 rounded border border-zinc-700/60" title="Van manager roster view">
+                                📱
+                            </button>
+                            <button onclick="deleteVanByIndex(${vIdx})" class="text-[10px] text-zinc-600 hover:text-red-400 px-1 py-0.5" title="Delete van">
+                                ✕
+                            </button>
+                        </div>
+                    </div>
+                    <div class="flex-1 overflow-y-auto space-y-1.5 custom-scrollbar pr-0.5">
+                        ${passengerRows || '<p class="text-zinc-600 text-center py-6 text-xs italic">No passengers assigned yet.</p>'}
+                    </div>
+                    <div class="mt-2 pt-1 border-t border-zinc-800/60 grid grid-cols-2 gap-1.5">
+                        <button onclick="promoteFromReserveByIndex(${vIdx})" class="text-center text-[10px] bg-zinc-950 hover:bg-zinc-800 text-zinc-400 border border-zinc-800/80 py-1 rounded-md transition-all truncate">
+                            + Draw Standby
+                        </button>
+                        <button onclick="addPassengerToVanByIndex(${vIdx})" class="text-center text-[10px] bg-zinc-950 hover:bg-zinc-800 text-zinc-400 border border-zinc-800/80 py-1 rounded-md transition-all truncate">
+                            + Add Person
+                        </button>
+                    </div>
+                `;
+                grid.appendChild(card);
+            });
+
+            renderDrawers();
+            updateLayoutCounters(keys.length, totalAssigned, totalConfirmed);
+
+            const searchCountEl = document.getElementById('search-count');
+            if (searchCountEl) {
+                searchCountEl.innerText = currentSearchQuery ? `${matchCount} found` : '';
+            }
+        }
+
+        function renderDrawers() {
+            const reserveDeck = document.getElementById('reserve-deck');
+            const archiveDeck = document.getElementById('archive-deck');
+
+            if (reserveDeck) {
+                reserveDeck.innerHTML = appState.reserves.length === 0 
+                    ? '<p class="text-zinc-600 text-[10px] italic">Standby reserve pool empty.</p>'
+                    : appState.reserves.map((p, idx) => `
+                        <div class="bg-zinc-900 border border-zinc-800 rounded-lg p-1.5 flex items-center justify-between gap-2 min-w-[150px] text-[10px] shadow-sm flex-shrink-0">
+                            <div class="min-w-0 flex-1">
+                                <p class="font-medium text-zinc-300 truncate">${escapeHtml(p.name)}</p>
+                                <p class="font-mono text-zinc-500 text-[9px]">${p.phone}</p>
+                            </div>
+                            <div class="flex items-center gap-1 flex-shrink-0">
+                                <button onclick="restoreFromStandby(${idx})" class="text-emerald-500 hover:text-emerald-400 p-0.5 text-xs" title="Assign to next available van">⬆</button>
+                                <button onclick="removeReserve(${idx})" class="text-zinc-600 hover:text-red-400 p-0.5 text-xs" title="Remove">✕</button>
+                            </div>
+                        </div>
+                    `).join('');
+            }
+
+            if (archiveDeck) {
+                archiveDeck.innerHTML = appState.archives.length === 0
+                    ? '<p class="text-zinc-600 text-[10px] italic">Displacement cache empty.</p>'
+                    : `
+                        <div class="flex items-center gap-2">
+                            ${appState.archives.map((p, idx) => `
+                                <div class="bg-zinc-900 border border-zinc-800 rounded-lg p-1.5 flex items-center justify-between gap-2 min-w-[150px] text-[10px] shadow-sm flex-shrink-0 line-through text-zinc-500">
+                                    <div class="min-w-0 flex-1">
+                                        <p class="font-medium truncate">${escapeHtml(p.name)}</p>
+                                        <p class="font-mono text-[9px]">${p.phone}</p>
+                                    </div>
+                                    <button onclick="restoreFromArchive(${idx})" class="text-zinc-400 hover:text-blue-400 p-0.5 text-xs no-underline font-normal" title="Restore back to Standby Pool">↩</button>
+                                </div>
+                            `).join('')}
+                            <button onclick="clearArchive()" class="text-[9px] text-zinc-600 hover:text-red-400 px-2 py-1 flex-shrink-0">Clear all</button>
+                        </div>
+                    `;
+            }
+
+            const rCount = document.getElementById('reserve-count');
+            const aCount = document.getElementById('archive-count');
+            if (rCount) rCount.innerText = appState.reserves.length;
+            if (aCount) aCount.innerText = appState.archives.length;
+        }
+
+        function updateLayoutCounters(vanCount, passCount, confCount) {
+            const stats = document.getElementById('global-stats');
+            if (stats) {
+                stats.innerText = `${vanCount} Matatus | ${passCount} Assigned | ${confCount || 0} Confirmed`;
+            }
+        }
+
+        function openVanManagerModal(vIdx) {
+            activeVanIndexForModal = vIdx;
+            const keys = Object.keys(appState.vans);
+            const key = keys[vIdx];
+            if (!key) return;
+
+            const passengers = appState.vans[key] || [];
+            const meta = (appState.vanMeta && appState.vanMeta[key]) ? appState.vanMeta[key] : {};
+
+            document.getElementById('vm-title').innerText = `🚐 ${key}`;
+            document.getElementById('vm-subtitle').innerText = `Capacity: ${passengers.length}/${MAX_CAPACITY} Assigned ${meta.leaderPhone ? '• Leader Phone: ' + meta.leaderPhone : ''}`;
+
+            const body = document.getElementById('vm-body');
+            body.innerHTML = `
+                <div class="bg-zinc-950 border border-zinc-800 rounded-lg overflow-hidden">
+                    <table class="w-full text-left text-[11px]">
+                        <thead class="bg-zinc-900 border-b border-zinc-800 text-zinc-400 font-mono">
+                            <tr>
+                                <th class="p-2 w-8">#</th>
+                                <th class="p-2">Name</th>
+                                <th class="p-2">Phone</th>
+                                <th class="p-2">Status</th>
+                                <th class="p-2 text-right">Actions</th>
+                            </tr>
+                        </thead>
+                        <tbody class="divide-y divide-zinc-800/60">
+                            ${passengers.map((p, idx) => {
+                                let clean = cleanPhone(p.phone);
+                                let intl = clean.startsWith('0') ? '254' + clean.substring(1) : clean;
+                                return `
+                                    <tr class="hover:bg-zinc-900/40">
+                                        <td class="p-2 font-mono text-zinc-500">${idx + 1}</td>
+                                        <td class="p-2 font-medium text-zinc-200">${escapeHtml(p.name)}</td>
+                                        <td class="p-2 font-mono">
+                                            <a href="tel:${clean}" class="text-blue-400 hover:underline">${p.phone}</a>
+                                        </td>
+                                        <td class="p-2">
+                                            <span class="px-1.5 py-0.5 rounded text-[10px] ${
+                                                p.status === 'confirmed' ? 'bg-emerald-950 text-emerald-400 border border-emerald-800/50' :
+                                                p.status === 'declined' ? 'bg-rose-950 text-rose-400 border border-rose-800/50' :
+                                                p.status === 'no_pickup' ? 'bg-amber-950 text-amber-400 border border-amber-800/50' :
+                                                'bg-zinc-800 text-zinc-400'
+                                            }">${p.status}</span>
+                                        </td>
+                                        <td class="p-2 text-right space-x-1">
+                                            <a href="https://wa.me/${intl}" target="_blank" class="text-emerald-400 hover:text-emerald-300 text-xs" title="Chat on WhatsApp">💬</a>
+                                            <a href="tel:${clean}" class="text-blue-400 hover:text-blue-300 text-xs" title="Call">📞</a>
+                                        </td>
+                                    </tr>
+                                `;
+                            }).join('')}
+                        </tbody>
+                    </table>
+                </div>
+            `;
+            openModal('van-manager-modal');
+        }
+
+        function copyVanForWhatsApp() {
+            if (activeVanIndexForModal === null) return;
+            const keys = Object.keys(appState.vans);
+            const key = keys[activeVanIndexForModal];
+            if (!key) return;
+
+            const passengers = appState.vans[key] || [];
+            const meta = (appState.vanMeta && appState.vanMeta[key]) ? appState.vanMeta[key] : {};
+
+            let text = `🚐 *GRACE ENCOUNTER - ${key.toUpperCase()}*\n`;
+            if (meta.leaderPhone) text += `Leader Phone: ${meta.leaderPhone}\n`;
+            text += `Capacity: ${passengers.length}/${MAX_CAPACITY}\n`;
+            text += `---------------------------------\n`;
+            passengers.forEach((p, idx) => {
+                const mark = p.isPresent || p.status === 'confirmed' ? '✅' : '⏳';
+                text += `${idx + 1}. ${p.name} - ${p.phone} ${mark}\n`;
+            });
+            text += `---------------------------------\n`;
+            text += `Safe travels in God's grace!`;
+
+            navigator.clipboard.writeText(text).then(() => {
+                showToast("Copied van list to clipboard for WhatsApp!");
+            }).catch(() => {
+                prompt("Copy below:", text);
+            });
+        }
+
+        function downloadVanOfflineHtml() {
+            if (activeVanIndexForModal === null) return;
+            const keys = Object.keys(appState.vans);
+            const key = keys[activeVanIndexForModal];
+            if (!key) return;
+
+            const passengers = appState.vans[key] || [];
+            let htmlContent = `
+<!DOCTYPE html>
+<html>
+<head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>${key} - Grace Encounter Manifest</title>
+    <style>
+        body { font-family: -apple-system, system-ui, sans-serif; padding: 16px; background: #09090b; color: #f4f4f5; }
+        h1 { font-size: 1.25rem; color: #10b981; margin-bottom: 4px; }
+        p { color: #a1a1aa; font-size: 0.85rem; margin-top: 0; }
+        .card { background: #18181b; border: 1px solid #27272a; border-radius: 8px; margin-bottom: 8px; padding: 10px; display: flex; justify-content: space-between; align-items: center; }
+        .name { font-weight: 600; font-size: 0.95rem; }
+        .phone { font-family: monospace; color: #71717a; font-size: 0.85rem; }
+        .actions a { text-decoration: none; padding: 6px 12px; border-radius: 6px; font-size: 0.8rem; font-weight: bold; margin-left: 4px; }
+        .call { background: #2563eb; color: white; }
+        .wa { background: #059669; color: white; }
+    </style>
+</head>
+<body>
+    <h1>🚐 ${key}</h1>
+    <p>Grace Encounter Dispatch • Total: ${passengers.length}/${MAX_CAPACITY}</p>
+    <div>
+        ${passengers.map((p, i) => {
+            let clean = cleanPhone(p.phone);
+            let intl = clean.startsWith('0') ? '254' + clean.substring(1) : clean;
+            return `
+                <div class="card">
+                    <div>
+                        <div class="name">${i + 1}. ${escapeHtml(p.name)}</div>
+                        <div class="phone">${p.phone}</div>
+                    </div>
+                    <div class="actions">
+                        <a href="tel:${clean}" class="call">Call</a>
+                        <a href="https://wa.me/${intl}" class="wa">WA</a>
+                    </div>
+                </div>
+            `;
+        }).join('')}
+    </div>
+</body>
+</html>
+            `;
+            const blob = new Blob([htmlContent], { type: 'text/html' });
+            const url = URL.createObjectURL(blob);
+            const a = document.createElement('a');
+            a.href = url;
+            a.download = `${key.replace(/\s+/g, '_')}_Manifest.html`;
+            a.click();
+            URL.revokeObjectURL(url);
+            showToast("Downloaded offline roster HTML!");
+        }
+
+        function openExportModal() {
+            const content = document.getElementById('export-content');
+            const summary = document.getElementById('export-summary-text');
+            const keys = Object.keys(appState.vans);
+
+            let totalPassengers = 0;
+            keys.forEach(k => totalPassengers += appState.vans[k].length);
+
+            if (summary) {
+                summary.innerText = `${keys.length} Total Vehicles | ${totalPassengers} Passengers Assigned | ${appState.reserves.length} Standby`;
+            }
+
+            if (content) {
+                if (keys.length === 0) {
+                    content.innerHTML = '<p class="text-zinc-600 italic">No manifests loaded.</p>';
+                } else {
+                    content.innerHTML = keys.map((k, vIdx) => {
+                        const list = appState.vans[k] || [];
+                        const meta = (appState.vanMeta && appState.vanMeta[k]) ? appState.vanMeta[k] : {};
+                        return `
+                            <div class="bg-zinc-950 p-3 rounded-lg border border-zinc-800">
+                                <div class="flex justify-between border-b border-zinc-800 pb-1 mb-2 font-bold text-zinc-300">
+                                    <span>${vIdx + 1}. ${escapeHtml(k)} ${meta.leaderPhone ? `<span class="text-emerald-400 font-mono text-[10px]">(Leader: ${meta.leaderPhone})</span>` : ''}</span>
+                                    <span>${list.length}/${MAX_CAPACITY}</span>
+                                </div>
+                                <div class="grid grid-cols-1 sm:grid-cols-2 gap-1 text-[11px] text-zinc-400">
+                                    ${list.map((p, i) => `
+                                        <div>${i + 1}. ${escapeHtml(p.name)} - <span class="text-zinc-500">${p.phone}</span></div>
+                                    `).join('')}
+                                </div>
+                            </div>
+                        `;
+                    }).join('');
+                }
+            }
+            openModal('export-modal');
+        }
+
+        function copyFullManifestText() {
+            const keys = Object.keys(appState.vans);
+            if (keys.length === 0) return;
+
+            let out = `GRACE ENCOUNTER - MASTER DISPATCH MANIFEST\n==========================================\n\n`;
+            keys.forEach((k, vIdx) => {
+                const list = appState.vans[k] || [];
+                const meta = (appState.vanMeta && appState.vanMeta[k]) ? appState.vanMeta[k] : {};
+                out += `[${vIdx + 1}] ${k} (${list.length}/${MAX_CAPACITY})${meta.leaderPhone ? ` [Leader: ${meta.leaderPhone}]` : ''}\n`;
+                list.forEach((p, i) => {
+                    out += `  ${i + 1}. ${p.name} - ${p.phone} [${p.status}]\n`;
+                });
+                out += `\n`;
+            });
+            if (appState.reserves.length > 0) {
+                out += `STANDBY WAITLIST POOL (${appState.reserves.length}):\n`;
+                appState.reserves.forEach((p, i) => {
+                    out += `  ${i + 1}. ${p.name} - ${p.phone}\n`;
+                });
+            }
+
+            navigator.clipboard.writeText(out).then(() => {
+                showToast("Copied full master manifest text!");
+            }).catch(() => {
+                prompt("Copy text below:", out);
+            });
+        }
+
+        // Initialize application cleanly on document ready
+        window.addEventListener('DOMContentLoaded', hydrateFromDeviceStorage);
+    </script>
+</body>
+</html>
